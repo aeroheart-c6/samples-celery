@@ -1,0 +1,17 @@
+version: "3.7"
+
+x-envs: &build
+    build:
+        context: .
+        dockerfile: docker/sample.dockerfile
+
+services:
+    redis:
+        image: redis:5.0
+
+    worker:
+        <<: *build
+        image: celery-sample:dev
+        depends_on:
+            - redis
+        command: ["celery-sample worker"]
