@@ -17,6 +17,7 @@ def setup():
         install_requires=[
             "celery==4.3.0",
             "pendulum==1.4.4",
+            "redis==3.4.1",
         ],
         classifiers=[
             "Programming Language:: Python :: 3.6",

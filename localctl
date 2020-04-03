@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+PATH_ROOT=$(cd "$(dirname "$0")" && pwd)
+
+PROJECT_NAME="airflow-mini"
+
+
+function airflow-compose {
+    docker-compose \
+        -f "${PATH_ROOT}/compose.main.yml" \
+        -p "${PROJECT_NAME}" \
+        --project-directory="${PATH_ROOT}" \
+        $@
+}
+
+
+function main {
+    subcommand=$1
+
+    case $subcommand in
+        "compose")
+            airflow-compose ${@:2}
+            ;;
+        "run")
+            airflow-compose run --no-deps --service-ports ${@:2}
+            ;;
+        "local-init")
+            echo "[$(date "+%F %T")] Generating .egg-info for mounting as setup.py develop"
+            airflow-compose run -u root worker pip install --editable="~/airflow"
+            ;;
+        *)
+            echo "[$(date "+%F %T")] Invalid sub-command $1"
+            ;;
+    esac
+}
+
+main $@

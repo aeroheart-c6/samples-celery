@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import functools
+import logging
 import os
 from signal import Signals
 
@@ -23,61 +24,52 @@ class Worker(CeleryWorker):
     def install_platform_tweaks(self, worker):
         super().install_platform_tweaks(worker)
 
-        callback = WorkerShutdownHandler(
-            app=self.app,
-            nodename=self.hostname,
-        )
-
         # end goal
-        platforms.signals["SIGSTOP"] = callback
+        platforms.signals["SIGABRT"] = WorkerShutdownHandler(worker)
 
 
 
 class WorkerShutdownHandler(object):
-    def __init__(self, app, nodename):
-        self.nodename = nodename
-        self.app = app
+    def __init__(self, worker):
+        self.worker = worker
+        self.nodename = worker.hostname
+        self.app = worker.app
 
-        self.control = Control(app=app)
+        self.control = Control(app=self.app)
 
-    def __call__(self, worker):
-        print(f"Marking tasks failed under: {self.nodename}")
+    def __call__(self, *args):
+        print(f"Status of: {self.nodename}")
+        with self.app.connection_for_read() as connection:
+            print(self.control.broadcast("stats",
+                connection=connection,
+                destination=[self.nodename],
+                reply=True
+            ))
+
+        print(f"Consumers closed for: {self.nodename}")
         self.halt()
+        print(f"Marking tasks failed under: {self.nodename}")
         self.terminate()
 
-    def get_queues(self):
-        # Get queues to halt
-        print(f"Getting queues for: {self.nodename}")
-        results = self.control.broadcast("active_queues",
-            reply=True,
-            destination=[self.nodename]
-        )
-
-        import json
-        print(json.dumps(results, indent=4))
-
-        try:
-            queues = results[0][self.nodename]
-            queues = [queue["name"] for queue in queues]
-        except (IndexError, KeyError) as exception:
-            print(str(exception))
-            queues = []
-
-        return queues
-
     def halt(self):
-        queues = self.get_queues()
-
-        for queue in queues:
-            print(f"Cancelling consumer for queue: {queue}")
-            results = self.control.broadcast("cancel_consumer",
-                reply=True,
+        with self.app.connection_for_read() as connection:
+            result = self.control.broadcast("active_queues",
+                connection=connection,
                 destination=[self.nodename],
-                arguments={"queue": queue}
+                reply=True
             )
 
-    def terminate(self):
-        pass
+            print(result)
 
-    def shutdown(self):
-        pass
+            result = self.control.broadcast("active",
+                connection=connection,
+                destination=[self.nodename],
+                reply=True
+            )
+
+            print(result)
+
+        # self.worker.pool.stop()
+
+    def terminate(self):
+        print("******************")
